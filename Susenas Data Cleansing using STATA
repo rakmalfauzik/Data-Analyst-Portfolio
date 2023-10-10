@@ -1,5 +1,0 @@
-//Susenas data is annual data, so data cleaning is carried out in more or less the same way for the data each year, especially for coding categories and naming variables. However, the example attached here is data
-//cleaning for 2022.
-//In each dataset, usually, there are 5 data modules: individual-level other socio-economic data, household-level other socio-economic data, household-level food expend data, household-level non-food expend, and
-//household-level total expend data. But, mostly we will use 3 of them without food and non-food expend data, and we can merge these 3 data into one dataset.
-

@@ -1,0 +1,568 @@
+//Susenas data is annual data, so data cleaning is carried out in more or less the same way for the data each year, especially for coding categories and naming variables. However, the example attached here is data
+//cleaning for 2022.
+//In each dataset, usually, there are 5 data modules: individual-level other socio-economic data, household-level other socio-economic data, household-level food expend data, household-level non-food expend, and
+//household-level total expend data. But, mostly we will use 3 of them without food and non-food expend data, and we can merge these 3 data into one dataset.
+
+//STATA preparation
+clear //Starting a new session, clear all data from memory
+set more off // Displaying the result all at once
+capture log close // Close Existing Log File
+
+//Changing Working Directory Folder
+cd "D:\Work\TAP_Jabar\WJTAP\DATA\DATA_MENTAH_SUSENAS\Susenas_Clean"
+
+//Synchronize the names of provinces for all data
+import excel using D:\Work\TAP_Jabar\WJTAP\DATA\WFP\idn_bnd_adm2_2017_bps_a\idn_bnd_adm2_2017_bps_a.xlsx, firstrow clear //Importing Specific Excel Data to STATA and making its firstrow as variable name
+collapse (mean) A1C_BPS, by (A1N_BPS) //Actually, this command is used to calculate the average of the variable A1C_BPS (Province Code) based on the categories of the variable A1N_BPS (Province Name). However,
+//this step is taken to condense the data since the units are at the district/city level, whereas I want to aggregate them at the provincial level.
+order A1C_BPS A1N_BPS //Sorts the dataset by the variables A1C_BPS and A1N_BPS
+rename (A1C_BPS A1N_BPS) (kode nama_daerah) //Renames variables A1C_BPS to kode and A1N_BPS to nama_daerah
+sort kode
+replace nama_daerah = "DI Yogyakarta" if nama_daerah == "Daerah Istimewa Yogyakarta" //Replaces values in the variable nama_daerah to become "DI Yogyakarta" if it is "Daerah Istimewa Yogyakarta"
+rename (kode nama_daerah) (r101 r101N)
+tempfile kodeprov //Creates temporary file name "kodeprov"
+save `kodeprov', replace //save and overwrite the dataset to "kodeprov" temporary file
+
+//Synchronize the names of districts/cities for all data
+import excel using D:\Work\TAP_Jabar\WJTAP\DATA\WFP\idn_bnd_adm2_2017_bps_a\idn_bnd_adm2_2017_bps_a.xlsx, firstrow clear
+collapse (mean) A2C_BPS, by (A2N_BPS)
+order A2C_BPS A2N_BPS
+rename (A2C_BPS A2N_BPS) (kode nama_daerah)
+sort kode
+replace nama_daerah = "Kotabaru" if nama_daerah == "Kota Baru"
+replace nama_daerah = "Kota Pangkalpinang" if nama_daerah == "Kota Pangkal Pinang"
+replace nama_daerah = "Karangasem" if nama_daerah == "Karang Asem"
+replace nama_daerah = "Pangkajene dan Kepulauan" if nama_daerah == "Pangkajene Dan Kepulauan"
+replace nama_daerah = "Mahakam Ulu" if nama_daerah == "Mahakam Hulu"
+replace nama_daerah = "Pasangkayu" if nama_daerah == "Mamuju Utara"
+replace nama_daerah = "Banyuasin" if nama_daerah == "Banyu Asin"
+replace nama_daerah = "Batanghari" if nama_daerah == "Batang Hari"
+drop if kode == 3038 | kode == 1288 | kode == 3399 | kode ==3288 | kode == 3388 //drop some row when it is not provincial code, when the code values are 3038, 1288, 3399, 3288, and 3388
+rename (kode nama_daerah) (r102 r102N)
+tempfile kodekab
+save `kodekab', replace
+
+//MERGE ALL SUSENAS FILE: Individual-level other socio-economic data(KOR Individu 1 and KOR Individu 2), Household-level other socio-economic data (KOR Rumah Tangga), and Household-level Expenditure data (KP43)
+//Convert all the files from CSV to stata file and then merge them all
+
+//Susenas KOR Individu 1
+import delimited D:\Work\TAP_Jabar\WJTAP\DATA\DATA_MENTAH_SUSENAS\Susenas_mar_22\kor22ind_1final.csv, delimiter(";") varnames(1) clear //Importing Specific CSV Data with ";" delimiter to STATA and making its
+//firstrow as variable name
+sort urut r401
+keep if r101 == 32 // keep only if the data is West Java Data with provincial code (r101) 32 because this data contains other provinces' data as well but is not as complete as West Java data
+tempfile ind1
+save `ind1', replace
+
+//Susenas KOR Individu 2
+import delimited D:\Work\TAP_Jabar\WJTAP\DATA\DATA_MENTAH_SUSENAS\Susenas_mar_22\kor22ind_2final.csv, delimiter(";") varnames(1) clear 
+sort urut r401
+keep if r101 == 32
+tempfile ind2
+save `ind2', replace
+
+//Merge Susenas KOR Individu
+use `ind1', clear
+merge 1:1 urut r401 using `ind2' //One-to-one merge between the current dataset and the dataset specified by ind2. The merge is based on the variables 'urut' and 'r401'
+drop _merge
+sort urut r401
+tempfile ind
+save `ind', replace
+
+//Susenas Kor Rumah Tangga
+import delimited "D:\Work\TAP_Jabar\WJTAP\DATA\DATA_MENTAH_SUSENAS\Susenas_mar_22\kor22rt rev20221230.csv", delimiter(";") varnames(1) clear 
+sort urut
+keep if r101 == 32
+tempfile rt
+save `rt', replace
+
+//Merge Susenas KOR Individu with Susenas KOR Rumah Tangga
+use `ind', clear
+merge m:1 urut using `rt' //Many-to-one merge between the current dataset(M) and the dataset specified by ind2(1). The merge is based on the variables 'urut'
+drop _merge
+sort urut r401
+tempfile kor
+save `kor', replace
+
+//Susenas KP43
+import delimited D:\Work\TAP_Jabar\WJTAP\DATA\DATA_MENTAH_SUSENAS\Susenas_mar_22\blok43_11_31.csv, delimiter(";") varnames(1) clear 
+sort urut
+keep if r101 == 32
+tempfile kp43
+save `kp43', replace
+
+//Merge Susenas KOR with Susenas KP43
+use `kor', clear
+merge m:1 urut using `kp43'
+drop _merge
+sort urut r401
+
+//Merge and synchronize this data to Provincial Code Data and Regencies/Cities Code Data
+sort r101 r102
+tostring r101 r102, generate(r101s r102s) //Create new string/text variable (r101s and r102s) from existing numeric variable (r101 and r102) 
+gen dumzero="0" //Create Dummy Variable named "dumzero" with value 0
+egen r102S=concat(dumzero r102s) if r102<10 //Create a new variable named r102S that combines the value of "dumzero" and "r102s" (which all the variables are string variables) when the variable r102 has a value
+smaller than 10
+//This step is used to convert all the data to 2-digit numerical data (01, 03, 08 instead of 1, 3, 8)
+egen r102new=concat(r101s r102S) //Create a data code that combine provincial code and regency/city code
+destring r102new, gen(R102) //Create new numerical variable (R102) from existing string variable (R102) 
+drop r101s r102S dumzero r102s r102new // drop some variables: r101s, r102S, dumzero, r102s, and r102new
+drop r102
+rename R102 r102
+order r101 r102 // order the first variable as r101 and r102
+sort r101 r102
+	merge m:1 r101 using `kodeprov'
+drop if _merge == 2 //drop the data(row) when it is only come from using data "kodeprov"
+drop _merge 
+sort r102
+	merge m:1 r102 using `kodekab'
+drop if _merge == 2
+drop _merge
+order r101 r101N r102 r102N
+sort r101 r102
+
+rename r102 kode
+label var kode "Kode Kabupaten/Kota" //labelling variable kode as "Kode Kabupaten/Kota"
+rename r102N nama_daerah
+label var nama_daerah "Nama Kabupaten/Kota"
+rename 	wert wert_kp43 
+recast int wert_kp43, force 
+rename weind weind_kp43
+recast int weind_kp43, force
+rename urut urut_keluarga
+label var urut_keluarga "Nomor Urut Keluarga"
+rename fwt fwt_kikr
+recasr int fwt_kikr, force
+replace fwt_kikr = wert_kp43 if fwt_kikr == .
+
+//----------------------------------------------------------------------------//
+//NAMING VARIABEL
+
+rename r105 urban
+recode urban (0 = .)
+label defin lab_urban 1 "Perkotaan" 2 "Perdesaan"
+label val urban lab_urban
+
+rename r401 urut_art
+label var urut_art "Nomor Urut Anggota Rumah Tangga"
+
+rename r403 hub_krt
+label var hub_krt "Hubungan dengan Kepala Rumah Tangga"
+recode hub_krt (0 = .)
+label define lab_hubkrt 1 "Kepala rumah tangga" 2 "Istri/suami" 3 "Anak kandung/tiri" 4 "Anak angkat" 5 "Menantu" 6 "Cucu" 7 "Orang tua/mertua" 8 "Pembantu/sopir" 9 "Lainnya" 
+label value hub_krt lab_hubkrt
+
+rename r404 married_stat
+label var married_stat "Status Perkawinan"
+recode married_stat (0 = .)
+label define lab_married_stat 1 "Belum kawin" 2 "Kawin" 3 "Cerai hidup" 4 "Cerai mati" 
+label value married_stat lab_married_stat
+
+rename r405 gender
+label var gender "Jenis Kelamin"
+recode gender (0 = .)
+label define lab_gender 1 "Laki-laki" 2 "Perempuan" 
+label value gender lab_gender
+
+rename r407 age
+label var age "Umur"
+
+rename r409 married_first
+label var married_first "Umur Saat Melangsungkan Perkawinan Pertama"
+recode married_first (0 = .)
+
+rename r610 school_stat
+label var school_stat "Apakah Bersekolah?"
+recode school_stat (0 = .)
+label define lab_school_stat 1 "Tidak/belum pernah Bersekolah" 2 "Masih Bersekolah" 3 "Tidak Bersekolah Lagi"
+label value school_stat lab_school_stat
+
+rename r612 current_educ
+label var current_educ "Jenjang Pendidikan tertinggi yang sedang/pernah diikuti"
+recode current_educ (0 22 = .) (2 3 4 5 = 1) (6 7 8 9 10= 2) (11 12 13 14 15 16 17 = 3) (18 = 4) (19 = 5) (20 21 = 6) (22 23 = 7) (24 = 8)
+label define lab_currenteduc 1 "SD Sederajat" 2 "SMP Sederajat" 3 "SMA/SMK Sederajat" 4 "D1/D2" 5 "D3" 6 "D4/S1" 7 "S2/Profesi" 8 "S3"
+label value current_educ lab_current_educ
+
+rename r614 education
+label var education "Ijazah Tertinggi yang Dimiliki"
+recode education (0 = .) (25 = 0) (2 3 4 5 = 1) (6 7 8 9 10 = 2) (11 12 13 14 15 16 17 = 3) (18 = 4) (19 = 5) (20 21 = 6) (22 23 = 7) (24 = 8)
+label define lab_education 0 "Tidak Punya Ijazah SD" 1 "SD Sederajat" 2 "SMP Sederajat" 3 "SMA/SMK Sederajat" 4 "D1/D2" 5 "D3" 6 "D4/S1" 7 "S2/Profesi" 8 "S3"
+label value education lab_education
+
+rename r616 kip
+label var kip "Memiliki Kartu Indonesia Pintar dalam setahun terakhir"
+recode kip (0 = .) (2 = 1) (5 = 0)
+label define lab_kip 1 "Ya, Memiliki KIP" 0 "Tidak Memiliki KIP"
+label value kip lab_kip
+
+rename r617 pip
+label var pip "Memperoleh Program Indonesia Pintar dalam setahun terakhir"
+recode pip (0 = .) (5 = 0)
+label define lab_pip 1 "Ya, Memperoleh PIP" 0 "Tidak memperoleh PIP"
+label value pip lab_pip
+
+rename r620 school_lastyear
+label var school_lastyear "Apakah Bersekolah di tahun ajaran sebelumnya?"
+recode school_lastyear (0 = .)
+label value school_lastyear lab_school_stat
+
+gen working = 1 if r702_a == "A"
+replace working = 0 if age >= 10 & r702_a != "A"
+label var working "Bekerja selama Seminggu Terakhir"
+label define lab_working 1 "Bekerja" 0 "Tidak Bekerja"
+label value working lab_working
+
+gen schooling = 1 if r702_b == "B"
+replace schooling = 0 if age >= 10 & r702_b != "B"
+label var schooling "Bersekolah selama Seminggu Terakhir"
+label define lab_schooling 1 "Bersekolah" 0 "Tidak Bersekolah"
+label value schooling lab_schooling 
+
+gen housekeeping = 1 if r702_c == "C"
+replace housekeeping = 0 if age >= 10 & r702_c != "C"
+label var housekeeping "Mengurus Rumah Tangga selama Seminggu Terakhir"
+label define lab_housekeeping 1 "Mengurus Rumah Tangga" 0 "Tidak Mengurus Rumah Tangga"
+label value housekeeping lab_housekeeping
+
+gen otheract = 1 if r702_d == "D"
+replace otheract = 0 if age >= 10 & r702_d != "D"
+label var otheract "Melakukan Kegiatan Lainnya Selain Kegiatan Pribadi selama Seminggu Terakhir"
+label define lab_otheract 1 "Melakukan Kegiatan Lainnya" 0 "Tidak Melakukan Kegiatan Lainnya"
+label value otheract lab_otheract
+
+gen donothing = 1 if r702_x == "X"
+replace donothing = 0 if age >= 10 & r702_x != "X"
+label var donothing "Tidak Melakukan Kegiatan selama Seminggu Terakhir"
+label define lab_donothing 1 "Tidak Melakukan Kegiatan" 0 "Melakukan Kegiatan"
+label value donothing lab_donothing
+
+rename r703 mainact
+label var mainact "Kegiatan Utama yang Menggunakan Waktu Terbanyak selama seminggu terakhir"
+recode mainact (0 = .)
+label define lab_mainact 1 "Bekerja" 2 "Sekolah" 3 "Mengurus Rumah Tangga" 4 "lainnya Selain Kegiatan Pribadi"
+label value mainact lab_mainact
+
+rename r704 tempnotwork
+label var tempnotwork "Sementara Tidak Bekerja seminggu yang lalu bagi yang tidak bekerja(walau bukan kegiatan utama) tapi mempunyai usaha/pekerjaan"
+recode tempnotwork (0 = .) (5 = 0)
+label define lab_tempnotwork 1 "Ya, Sementara Tidak Bekerja" 0 "Tidak (tidak bekerja)"
+label value tempnotwork lab_tempnotwork
+
+rename r705 worksector26
+label var worksector26 "Lapangan Usaha Pekerjaan Utama"
+recode worksector26 (0 = .)
+label define lab_worksector26 1 "Pertanian tanaman padi dan palawija" 2 "Hortikultura" 3 "Perkebunan" 4 "Perikanan" 5 "Peternakan" 6 "Kehutanan dan pertanian lainnya" 7 "Pertambangan dan penggalian" 8 "Industri pengolahan" 9 "Pengadaan listrik, gas, uap/air panas, dan udara dingin" 10 "Pengelolaan air, air limbah, daur ulang sampah, dan aktivita" 11 "Konstruksi" 12 "Perdagangan besar dan eceran, reparasi dan perawatan mobil d" 13 "Pengangkutan dan pergudangan" 14 "Penyediaan akomodasi dan makan minum" 15 "Informasi dan komunikasi" 16 "Aktivitas keuangan dan asuransi" 17 "Real estate" 18 "Aktivitas profesional, ilmiah, dan teknis" 19 "Aktivitas penyewaan dan sewa guna tanpa hak opsi, ketenagake" 20 "Administrasi pemerintahan, pertahanan, dan jaminan sosial wa" 21 "Pendidikan" 22 "Aktivitas kesehatan manusia dan sosial" 23 "Kesenian, liburan dan rekreasi" 24 "Aktivitas jasa lainnya" 25 "Aktivitas rumah tangga sebagai pemberi kerja" 26 "Aktivitas badan internasional dan ekstra internasional lain"  
+label value worksector26 lab_worksector26
+
+rename r706 workstat
+label var workstat "Status/Kedudukan Pekerjaan Utama"
+recode workstat (0 = .)
+label define lab_workstat 1 "Berusaha sendiri" 2 "Berusaha dibantu buruh tdk tetap/tdk dibayar" 3 "Berusaha dibantu buruh tetap/buruh dibayar" 4 "Buruh/karyawan/pegawai" 5 "Pekerja bebas" 6 "Pekerja keluarga atau tidak dibayar" 
+label value workstat lab_workstat
+
+rename r707 workhour
+label var workhour "Jumlah Jam Kerja Pekerjaan Utama Seminggu Terakhir"
+recode workhour (0 = .)
+
+rename r708 workhour_total
+label var workhour_total "Jumlah Jam Kerja Seluruh Pekerjaan Seminggu Terakhir"
+recode workhour_total (0 = .)
+
+rename r801 handphone
+label var handphone "Menggunakan Handphone"
+recode handphone (0 = .) (5 = 0)
+label define lab_handphone 1 "Ya, Menggunakan Handphone" 0 "Tidak Menggunakan Handphone"
+label value handphone lab_handphone
+
+gen computer = 1 if r807_a == "A" | r807_b == "B" | r807_c == "C"
+replace computer = 0 if r807_x == "X"
+label define lab_computer 1 "Ya, Menggunakan Komputer" 0 "Tidak Menggunakan Komputer"
+label value computer lab_computer
+
+rename r808 internet
+label var internet "Menggunakan Internet (termasuk Sosial Media)"
+recode internet (0 = .) (5 = 0)
+label define lab_internet 1 "Ya, Menggunakan Internet" 0 "Tidak Menggunakan Internet"
+label value internet lab_internet
+
+gen inet_news = 1 if r811_a == "A"
+replace inet_news = 0 if internet == 1 & r811_a != "A"
+label var inet_news "Menggunakan Internet untuk Mendapat Informasi/Berita"
+label define lab_inetfunciton 1 "Ya" 2 "Tidak"
+label value inet_news lab_inetfunciton
+
+gen inet_study = 1 if r811_h == "H"
+replace inet_study = 0 if internet == 1 & r811_h != "H"
+label var inet_study "Menggunakan Internet untuk Proses Pembelajaran / Pembelajaran Online"
+label value inet_study lab_inetfunciton
+
+gen inet_email = 1 if r811_c == "C"
+replace inet_email = 0 if internet == 1 & r811_c != "C"
+label var inet_email "Menggunakan Internet untuk Mengirim/Menerima e-mail"
+label value inet_email lab_inetfunciton
+
+gen inet_socmed = 1 if r811_d == "D"
+replace inet_socmed = 0 if internet == 1 & r811_d != "D"
+label var inet_socmed "Menggunakan Internet untuk Media Sosial"
+label value inet_socmed lab_inetfunciton
+
+gen inet_buy = 1 if r811_e == "E"
+replace inet_buy = 0 if internet == 1 & r811_e != "E"
+label var inet_buy "Menggunakan Internet untuk Pembelian Barang/Jasa"
+label value inet_buy lab_inetfunciton
+
+gen inet_sell = 1 if r811_f == "F"
+replace inet_sell = 0 if internet == 1 & r811_f != "F"
+label var inet_sell "Menggunakan Internet untuk Penjualan Barang/Jasa"
+label value inet_sell lab_inetfunciton
+
+gen inet_entertain = 1 if r811_j == "J"
+replace inet_entertain = 0 if internet == 1 & r811_j != "J"
+label var inet_entertain "Menggunakan Internet untuk Hiburan (Download/Main Game, Nonton TV, Download/Nonton Film/Video, Radio, Download Gambar dan Musik"
+label value inet_entertain lab_inetfunciton
+
+gen inet_finance = 1 if r811_g == "G"
+replace inet_finance = 0 if internet == 1 & r811_g != "G"
+label var inet_finance "Menggunakan Internet untuk Fasilitas Finansial (e-banking)"
+label value inet_finance lab_inetfunciton
+
+gen inet_info = 1 if r811_b == "B"
+replace inet_info = 0 if internet == 1 & r811_b != "B"
+label var inet_info "Menggunakan Internet untuk Mendapat Informasi Mengenai Barang/Jasa"
+label value inet_info lab_fungsiinternet
+
+gen inet_wfh = 1 if r811_i == "I"
+replace inet_wfh = 0 if internet == 1 & r811_i != "I"
+label var inet_wfh "Menggunakan Internet untuk Work From Home (WFH) / Bekerja Online dari Rumah"
+label value inet_wfh lab_fungsiinternet
+
+gen inet_konten = 1 if r811_k == "K"
+replace inet_konten = 0 if internet == 1 & r811_k != "K"
+label var inet_konten "Menggunakan Internet untuk Pembuatan Konten Digiral"
+label value inet_konten lab_fungsiinternet
+
+gen inet_lain = 1 if r811_l == "L"
+replace inet_lain = 0 if internet == 1 & r811_l != "L"
+label var inet_lain "Menggunakan Internet untuk hal Lainnya"
+label value inet_lain lab_fungsiinternet
+
+rename r701 bankacc
+label var bankacc "Memiliki Rekening Tabungan Sendiri atau Bersama-sama di Lembaga Keuangan"
+recode bankacc (0 = .) (5 = 0)
+label define lab_bankacc 1 "Ya" 0 "Tidak"
+label value bankacc lab_bankacc
+
+rename r2202 kks
+label var kks "Menerima Kartu Keluarga Sejahtera"
+recode kks (0 = .) (2 = 1) (5 = 0)
+label define lab_bantuan 1 "Ya" 0 "Tidak"
+label value kks lab_bantuan
+
+rename r2203 pkh
+label var pkh "Menjadi Penerima Program Keluarga Harapan dalam setahun Terakhir"
+recode pkh (0 = .) (5 = 0)
+label value pkh lab_bantuan
+
+rename r2207 banpangan
+label var banpangan "Menjadi Penerima Bantuan Pangan(Bantuan Pangan Non Tunai(BPNT)/Program Sembako)"
+recode banpangan (0 = .) (5 = 0)
+label value banpangan lab_bantuan
+
+gen bansos = 1 if r2211a == 1
+replace bansos = 0 if r2211a == 5
+label var bansos "Menjadi Menerima Bantuan/Bantuan Sosial/Subdsidi dari Pemda dalam setahun Terakhir"
+label value bansos lab_bantuan
+
+rename r301 jumlah_art
+label var jumlah_art "Jumlah Anggota Rumah Tangga"
+label var food "Rata-rata Pengeluaran Makanan Rumah Tangga Sebulan"
+label var nonfood "Rata-rata Pengeluaran Bukan Makanan Rumah Tangga Sebulan"
+label var expend "Rata-rata Peneluaran Rumah Tangga Sebulan"
+label var kapita "Rata-rata Pengeluaran Perkapita Sebulan"
+label var kalori_kap "Banyaknya Komsumsi Kalori Perkapita Sehari"
+label var prote_kap "Banyaknya Komsumsi Protein Perkapita Sehari"
+label var lemak_kap "Banyaknya Komsumsi Lemak Perkapita Sehari"
+label var karbo_kap "Banyaknya Komsumsi Karbohidrat Perkapita Sehari"
+
+rename r1816 lighting
+label var lighting "Sumber Utama Penerangan"
+recode lighting (0 = .)
+label define lab_lighting 1 "Listrik PLN dengan meteran" 2 "Listrik PLN tanpa meteran" 3 "Listrik non PLN" 4 "Bukan Listrik"
+label value lighting lab_lighting
+
+rename r1810a water_drink
+label var water_drink "Sumber Air utama untuk Minum"
+recode water_drink (0 = .)
+label define lab_water 1 "Air kemasan bermerk" 2 "Air isi ulang" 3 "Leding" 4 "Sumur bor/pompa" 5 "Sumur terlindung" 6 "Sumur tak terlindung" 7 "Mata air terlindung" 8 "Mata air tak terlindung" 9 "Air permukaan" 10 "Air hujan" 11 "Lainnya"
+label value water_drink lab_water
+
+rename r1814a water_wash
+label var water_wash "Sumber Air utama untuk Mandi/Cuci/Dll"
+recode water_wash (0 = .)
+label value water_wash lab_water
+
+rename r1809a toilet
+label var toilet "Fasilitas Tempat BAB"
+recode toilet (0 = .)
+label define lab_toilet 1 "Ada, digunakan hanya ART Sendiri" 2 "Ada, digunakan bersama ART rumah tangga tertentu" 3 "Ada, di MCK Komunal" 4 "Ada di MCK umum/siapapun menggunakan" 5 "Ada, ART tidak menggunakan" 6 "Tidak ada fasilitas"
+label value toilet lab_toilet
+
+rename r1809b closet
+label var closet "Jenis kloset yang digunakan"
+recode closet (0 = .)
+label define lab_closet 1 "Leher angsa" 2 "Plengsengan dengan tutup" 3 "Plengsengan tanpa tutup" 4 "Cemplung/Cubluk"
+label value closet lab_closet
+
+rename r1809c final_waste
+label var final_waste "Tempat Pembuangan Akhir Tinja"
+recode final_waste (0 = .)
+label define lab_final_waste 1 "Tangki septik" 2 "IPAL" 3 "Kolam/sawah/sungai/danau/laut" 4 "Lubang tanah" 5 "Pantai/tanah lapang/kebun" 6 "Lainnya"
+lab value final_waste lab_final_waste
+
+gen healthinsur_bpjspbi = 1 if r1101_a == "A"
+label var healthinsur_bpjspbi "Memiliki Jaminan Kesehatan: BPJS Kesehatan Penerima Bantuan Iuran(PBI)"
+gen healthinsur_bpjs = 1 if r1101_b == "B"
+label var healthinsur_bpjs "Memiliki Jaminan Kesehatan: BPJS Kesehatan non PBI"
+gen healthinsur_jamkesda = 1 if r1101_c == "C"
+label var healthinsur_jamkesda "Memiliki Jaminan Kesehatan: Jamkesda"
+gen healthinsur_private = 1 if r1101_d == "D"
+label var healthinsur_private "Memiliki Jaminan Kesehatan: Asuransi swasta"
+gen healthinsur_company = 1 if r1101_e == "E"
+label var healthinsur_company "Memiliki Jaminan Kesehatan: Perusahaan/kantor"
+gen healthinsur_no = 1 if r1101_x == "X"
+label var healthinsur_no "Tidak Memiliki Jaminan Kesehatan"
+
+foreach var of varlist healthinsur_bpjspbi-healthinsur_no {
+	recode `var' (. = 0)
+}
+
+rename r1102 sick
+label var sick "Mempunyai Keluhan Kesehatan dalam Sebulan Terakhir"
+recode sick (0 = .) (5 = 0)
+label define lab_sick 1 "Ya, Mempunyai Keluhan Kesehatan" 0 "Tidak Mempunyai Keluhan Kesehatan"
+label value sick lab_sick
+
+rename r1103 sick_cantact
+label var sick_cantact "Keluhan Kesehatan mengakibatkan terganggunya Pekerjaan, Sekolah, atau Kegiatan Sehari-hari"
+recode sick_cantact (0 = .) (5 = 0)
+label define lab_sick_contact 1 "Keluhan Kesehatan Menganggu Kegiatan" 0 "Keluhan Kesehatan Tidak Menganggu Kegiatan"
+label value sick_cantact lab_sick_cantact
+
+rename r1104 selfmedicating
+label var selfmedicating "Pernah mengobati sendiri"
+recode selfmedicating (5 = 0) (0 = .)
+label define lab_selfmedicating 1 "Ya" 2 "Tidak"
+label value selfmedicating lab_selfmedicating
+
+rename r1105 outpatient
+label var outpatient "Pernah Rawat Jalan dalam Sebulan Terakhir"
+recode outpatient (0 = .) (5 = 0)
+label define lab_outpatient 1 "Pasien Rawat Jalan" 0 "Bukan Pasien Rawat Jalan"
+label value outpatient lab_outpatient
+
+rename r1106 notoutpatient_reason
+recode notoutpatient_reason (9 = 10)
+label var notoutpatient_reason "Alasan Utama Tidak Rawat Jalan"
+label define reason_notoutpatient 1 "Tidak punya biaya berobat" 2 "Tidak ada biaya transportasi" 3 "Tidak ada sarana transportasi" 4 "Waktu tunggu pelayanan lama" 5 "Mengobati sendiri" 6 "Tidak ada yang mendampingi" 7 "Merasa tidak perlu" 8 "Khawatir terpapar Covid-19" 10 "Lainnya"
+label value notoutpatient_reason reason_notoutpatient
+
+gen outpatient_hospitalgov = 1 if r1107_a == "A"
+label var outpatient_hospitalgov "Tempat Rawat Jalan: RS Pemerintah"
+gen outpatient_hospitalprivate = 1 if r1107_b == "B"
+label var outpatient_hospitalprivate "Tempat Rawat Jalan: RS Swasta"
+gen outpatient_doctor = 1 if r1107_c == "C"
+label var outpatient_doctor "Tempat Rawat Jalan: Praktik dokter/bidan"
+gen outpatient_clinic = 1 if r1107_d == "D"
+label var outpatient_clinic "Tempat Rawat Jalan: Klinik/Praktik dokter bersama"
+gen outpatient_puskesmas = 1 if r1107_e == "E"
+label var outpatient_puskesmas "Tempat Rawat Jalan: Puskesmas/Pustu"
+gen outpatient_ukbm = 1 if r1107_f == "F"
+label var outpatient_ukbm "Tempat Rawat Jalan: UKBM(Poskesdes, Polindes, Posyandu, Balai Pengobatan"
+gen outpatient_traditional = 1 if r1107_g == "G"
+label var outpatient_traditional "Tempat Rawat Jalan: Praktik pengobatan tradisional/alternatif"
+gen outpatient_other = 1 if r1107_h == "H"
+label var outpatient_other "Tempat Rawat Jalan: Lainnya"
+
+rename r1201 inpatient
+label var inpatient "Pernah Dirawat Inap dalam Setahun Terakhit"
+recode inpatient (0 = .) (5 = 0)
+
+gen inpatient_hospitalgov = 1 if r1202_a == "A"
+label var inpatient_hospitalgov "Tempat Rawat Jalan: RS Pemerintah"
+gen inpatient_hospitalprivate = 1 if r1202_b == "B"
+label var inpatient_hospitalprivate "Tempat Rawat Jalan: RS Swasta"
+gen inpatient_doctor = 1 if r1202_c == "C"
+label var inpatient_doctor "Tempat Rawat Jalan: Praktik dokter/bidan"
+gen inpatient_clinic = 1 if r1202_d == "D"
+label var inpatient_clinic "Tempat Rawat Jalan: Klinik/Praktik dokter bersama"
+gen inpatient_puskesmas = 1 if r1202_e == "E"
+label var inpatient_puskesmas "Tempat Rawat Jalan: Puskesmas/Pustu"
+gen inpatient_traditional = 1 if r1202_f == "F"
+label var inpatient_traditional "Tempat Rawat Jalan: Praktik pengobatan tradisional/alternatif"
+gen inpatient_other = 1 if r1202_g == "G"
+label var inpatient_other "Tempat Rawat Jalan: Lainnya"
+rename r1203 inpatient_day
+label var inpatient_day "Lama Hari Dirawat Inap"
+recode inpatient_day (0 = .)
+
+rename r1804 floor_area
+label var floor_area "Luas Lantai Rumah"
+
+rename r1806 roof
+label var roof "Bahan Bangunan Utama Atap Terluas"
+recode roof (0 = .)
+label define lab_roof 1 "Beton" 2 "Genteng" 3 "Seng" 4 "Asbes" 5 "Bambu" 6 "Kayu/sirap" 7 "Jerami/ijuk/daun-daunan/rumbia" 8 "Lainnya"
+label value roof lab_roof
+
+rename r1807 wall
+label var wall "Bahan Bangunan Utama Dinding Terluas"
+recode wall (0 = .)
+label define lab_wall 1 "Tembok" 2 "Plesteran anyaman bambu/kawat" 3 "Kayu/papan" 4 "Anyaman bambu" 5 "Batang kayu" 6 "Bambu" 7 "Lainnya"
+label value wall lab_wall
+
+rename r1808 floor
+label var floor "Bahan Bangunan Utama Lantai Terluas"
+recode floor (0 = .)
+label define lab_floor 1 "Marmer/granit" 2 "Keramik" 3 "Parket/vinil/karpet" 4 "Ubin/tegel/teraso" 5 "Kayu/papan" 6 "Semen/bata merah" 7 "Bambu" 8 "Tanah" 9 "Lainnya"
+label value floor lab_floor
+
+gen elektronik_kecil = 1 if r802 == 1 | r2001f == 1 
+recode elektronik_kecil (. = 0)
+label var elektronik_kecil "Memiliki Elektronik Kecil: HP, Laptop, Komputer, atau Tablet"
+label define lab_elektronikkecil 1 "Memiliki Elektronik Kecil" 0 "Tidak Memiliki Elektronik Kecil"
+label value elektronik_kecil lab_elektronikkecil
+
+gen elektronik_besar = 1 if r2001b == 1 | r2001c == 1 | r2001l == 1 
+recode elektronik_besar (. = 0)
+label var elektronik_besar "Memiliki Elektronik Besar: Kulkas, AC, atau TV"
+label define lab_elektronikbesar 1 "Memiliki Elektronik Besar" 0 "Tidak Memiliki Elektronik Besar"
+label value elektronik_besar lab_elektronikbesar
+
+gen kendaraan_bermotor = 1 if r2001h == 1 | r2001k == 1
+recode kendaraan_bermotor (. = 0)
+label var kendaraan_bermotor "Memiliki Kendaraan Bermotor: Sepeda Motor atau Mobil"
+label define lab_kendbermotor 1 "Memiliki Kendaraan Bermotor" 0 "Tidak Memiliki Kendaraan Bermotor"
+label value kendaraan_bermotor lab_kendbermotor
+
+gen tanah = 1 if r2001m == 1
+recode tanah (. = 0)
+label var tanah "Memiliki Tanah / Lahan"
+label define lab_tanah 1 "Memiliki Tanah / Lahan" 0 "Tidak Memiliki Tanah / Lahan"
+label value tanah lab_tanah
+
+gen rumah = 1 if r1802 == 1
+recode rumah (. = 0)
+label var rumah "Bangunan Tempat Tinggal (Rumah) adalah Milik Sendiri"
+label define lab_rumah 1 "Rumah Milik Sendiri" 0 "Rumah Bukan Milik Sendiri"
+label value rumah lab_rumah
+
+gen bantuan_covid = 1 if r2209a == 1 | r2209b == 1 | r2209c == 1 | r2209d == 1
+recode bantuan_covid (. = 0)
+label var bantuan_covid "Menerima Bantuan Covid: BST, BLT DD, Beras Bulog, atau Sembako PPKM"
+label define lab_bantuancovid 1 "Menerima Bantuan Covid" 0 "Tidak Menerima Bantuan Covid"
+label value bantuan_covid lab_bantuancovid
+
+rename (r101 r101N) (kode_prov nama_prov)
+order kode_prov nama_prov kode nama_daerah fwt wert weind urut_keluarga urut_art
+destring ssu, replace
+
+save 32_mar_22_clean, replace
