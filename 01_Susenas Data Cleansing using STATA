@@ -121,7 +121,7 @@ order r101 r101N r102 r102N
 sort r101 r102
 
 rename r102 kode
-label var kode "Kode Kabupaten/Kota" //labelling variable kode as "Kode Kabupaten/Kota"
+label var kode "Kode Kabupaten/Kota" //labelling variable "kode" as "Kode Kabupaten/Kota"
 rename r102N nama_daerah
 label var nama_daerah "Nama Kabupaten/Kota"
 rename 	wert wert_kp43 
@@ -131,16 +131,16 @@ recast int weind_kp43, force
 rename urut urut_keluarga
 label var urut_keluarga "Nomor Urut Keluarga"
 rename fwt fwt_kikr
-recasr int fwt_kikr, force
+recast int fwt_kikr, force //Changes the variable 'fwt_kikr' to integer type, because it will be used as frequency weight and
 replace fwt_kikr = wert_kp43 if fwt_kikr == .
 
 //----------------------------------------------------------------------------//
 //NAMING VARIABEL
 
 rename r105 urban
-recode urban (0 = .)
-label defin lab_urban 1 "Perkotaan" 2 "Perdesaan"
-label val urban lab_urban
+recode urban (0 = .) //Replace the value of variable "urban" from 0 to . (missing value)
+label define lab_urban 1 "Perkotaan" 2 "Perdesaan" //Create label value named "lab_urban": 1 for "Perkotaan" and 2 for "Perdesaan"
+label val urban lab_urban //Apply label value "lab_urban" to variable "urban"
 
 rename r401 urut_art
 label var urut_art "Nomor Urut Anggota Rumah Tangga"
@@ -178,7 +178,7 @@ label value school_stat lab_school_stat
 
 rename r612 current_educ
 label var current_educ "Jenjang Pendidikan tertinggi yang sedang/pernah diikuti"
-recode current_educ (0 22 = .) (2 3 4 5 = 1) (6 7 8 9 10= 2) (11 12 13 14 15 16 17 = 3) (18 = 4) (19 = 5) (20 21 = 6) (22 23 = 7) (24 = 8)
+recode current_educ (0 22 = .) (2 3 4 5 = 1) (6 7 8 9 10= 2) (11 12 13 14 15 16 17 = 3) (18 = 4) (19 = 5) (20 21 = 6) (22 23 = 7) (24 = 8) //Replace the value of variable "current_educ"
 label define lab_currenteduc 1 "SD Sederajat" 2 "SMP Sederajat" 3 "SMA/SMK Sederajat" 4 "D1/D2" 5 "D3" 6 "D4/S1" 7 "S2/Profesi" 8 "S3"
 label value current_educ lab_current_educ
 
@@ -418,7 +418,7 @@ recode final_waste (0 = .)
 label define lab_final_waste 1 "Tangki septik" 2 "IPAL" 3 "Kolam/sawah/sungai/danau/laut" 4 "Lubang tanah" 5 "Pantai/tanah lapang/kebun" 6 "Lainnya"
 lab value final_waste lab_final_waste
 
-gen healthinsur_bpjspbi = 1 if r1101_a == "A"
+gen healthinsur_bpjspbi = 1 if r1101_a == "A" //Create variable "healthinsur_bpjs' dan gives a value of 1 if variable "r1101_a" is "A"
 label var healthinsur_bpjspbi "Memiliki Jaminan Kesehatan: BPJS Kesehatan Penerima Bantuan Iuran(PBI)"
 gen healthinsur_bpjs = 1 if r1101_b == "B"
 label var healthinsur_bpjs "Memiliki Jaminan Kesehatan: BPJS Kesehatan non PBI"
@@ -433,7 +433,7 @@ label var healthinsur_no "Tidak Memiliki Jaminan Kesehatan"
 
 foreach var of varlist healthinsur_bpjspbi-healthinsur_no {
 	recode `var' (. = 0)
-}
+} //Using loop for replacing the value of "healthinsur_bpjspbi" to "healthinsur_no" sequencially from . (missing value) to 0
 
 rename r1102 sick
 label var sick "Mempunyai Keluhan Kesehatan dalam Sebulan Terakhir"
@@ -565,4 +565,4 @@ rename (r101 r101N) (kode_prov nama_prov)
 order kode_prov nama_prov kode nama_daerah fwt wert weind urut_keluarga urut_art
 destring ssu, replace
 
-save 32_mar_22_clean, replace
+save 32_mar_22_clean, replace //save this file after doing all those steps formatted in Stata named "32_mar_22_clean"
