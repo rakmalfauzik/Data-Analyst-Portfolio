@@ -12,7 +12,7 @@ cd "D:\Work\TAP_Jabar\WJTAP\dBase\dBase_3_Mikro\SUSENAS\gic"
 //Create a global variable "data" to refer to the location of the data source folder
 global data D:\Work\TAP_Jabar\WJTAP\DATA\DATA_MENTAH_SUSENAS\Susenas_Clean
 
-//------------------------------//
+//--------------baru edit sampai sini----------------//
 
 import excel using gk_jkt_jabar.xlsx, firstrow clear
 tempfile gk
