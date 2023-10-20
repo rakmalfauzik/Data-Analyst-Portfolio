@@ -1,0 +1,80 @@
+//In this module, do-files will be explained to produce growth incidence curves from per capita expenditure data
+//The per capita expenditure variable will be equalized by equating the base year to 2018 so that the value will be adjusted using inflation
+
+//Preparing Stata
+clear
+set more off
+capture log close
+
+//Choosing Working Directory
+cd "D:\Work\TAP_Jabar\WJTAP\dBase\dBase_3_Mikro\SUSENAS\gic"
+
+//Create a global variable "data" to refer to the location of the data source folder
+global data D:\Work\TAP_Jabar\WJTAP\DATA\DATA_MENTAH_SUSENAS\Susenas_Clean
+
+//------------------------------//
+
+import excel using gk_jkt_jabar.xlsx, firstrow clear
+tempfile gk
+save `gk', replace
+
+use $data/32_mar_22_clean, clear
+keep if kode_prov == 32
+replace kode = 32
+replace nama_daerah = "Jawa Barat"
+
+merge m:1 kode nama_daerah urban using `gk'
+keep kode nama_daerah urban kapita GK_Jakarta18 GK_Jabar_18 GK_Jabar_22 fwt_kikr
+gen kapita_disesuaikan22 = kapita * (GK_Jabar_22/GK_Jakarta18)
+
+recast int fwt_kikr, force
+xtile pctile = kapita_disesuaikan22 [fw=fwt_kikr], nq(100)
+collapse (mean) kapita_disesuaikan22 [fw = fwt_kikr], by(pctile kode nama_daerah)
+
+tempfile pctile22
+save `pctile22', replace
+
+use $data/32_mar_18_clean, clear
+replace kode = 32
+replace nama_daerah = "Jawa Barat"
+
+merge m:1 kode nama_daerah urban using `gk'
+keep kode nama_daerah urban kapita GK_Jakarta18 GK_Jabar_18 GK_Jabar_22 fwt_kikr
+gen kapita_disesuaikan18 = kapita * (GK_Jabar_18/GK_Jakarta18)
+
+recast int fwt_kikr, force
+xtile pctile = kapita_disesuaikan18 [fw=fwt_kikr], nq(100)
+collapse (mean) kapita_disesuaikan18 [fw = fwt_kikr], by(pctile kode nama_daerah)
+
+merge 1:1 kode nama_daerah pctile using `pctile22'
+drop _merge
+
+gen growth22_18 = (kapita_disesuaikan22 - kapita_disesuaikan18) / kapita_disesuaikan18
+
+line growth22_18 pctile
+
+export excel using gic.xlsx, sheet(Sheet1) firstrow(variables) sheetreplace
+
+//percentile aja
+use $data/32_mar_22_clean, clear
+keep if kode_prov == 32
+replace kode = 32
+replace nama_daerah = "Jawa Barat"
+
+recast int fwt_kikr, force
+xtile pctile = kapita [fw=fwt_kikr], nq(100)
+collapse (mean) kapita22 = kapita [fw = fwt_kikr], by(pctile kode nama_daerah)
+
+save `pctile22', replace
+
+use $data/32_mar_18_clean, clear
+replace kode = 32
+replace nama_daerah = "Jawa Barat"
+
+recast int fwt_kikr, force
+xtile pctile = kapita [fw=fwt_kikr], nq(100)
+collapse (mean) kapita18 = kapita [fw = fwt_kikr], by(pctile kode nama_daerah)
+
+merge 1:1 kode nama_daerah pctile using `pctile22'
+drop _merge
+export excel using pctileaja.xlsx, sheet(Sheet1) firstrow(variables) sheetreplace
