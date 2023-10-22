@@ -1,0 +1,129 @@
+//In this module, do-files will be explained to produce growth incidence curves from per capita expenditure data
+//The per capita expenditure variable will be equalized by equating the base year to 2018 so that the value will be adjusted using inflation
+
+//Preparing Stata
+clear
+set trace off
+capture log close
+
+//Choosing Working Directory
+cd "D:\Work\TAP_Jabar\WJTAP\dBase\dBase_3_Mikro\SUSENAS\gic"
+//Create a global variable "data" to refer to the location of the data source folder
+global data D:\Work\TAP_Jabar\WJTAP\DATA\DATA_MENTAH_SUSENAS\Susenas_Clean
+
+//Use a loop to repeat the same steps for 2018-2022 data
+foreach num of numlist 18/22 {
+	//uses a dataset located in a directory or folder stored in the $data variable, with the filename "32_mar_`num'_clean", and cleans all data previously in memory before loading a new dataset.
+	use $data/32_mar_`num'_clean, clear
+	//making sure that we only use west java data with regency code 3201 - 3299
+	keep if kode > 3200 & kode < 3300
+
+	recast int fwt_kikr, force
+	sort kapita
+	//produces a new variable called pctile which contains the percentiles of the capita variable using the weights of the fwt_kikr variable, with a total of 100 percentiles.
+	xtile pctile = kapita [fw = fwt_kikr], nq(100)
+	//change the region code to "32" and the region name to "West Java" thus changing the depth of this data to only reach the provincial level
+	replace kode = 32
+	replace nama_daerah = "Jawa Barat"
+	//calculates the average of the variable inc20[num] (where [num] is a specific number related to the loop used) based on the capita variable, with the weight of the variable fwt_kikr, and the results are grouped based on the variables pctile, code, and area_name.
+	//This step is used to fill in the value of per capita expenditure from each percentile of community expenditure groups
+	collapse (mean) inc20`num'=kapita [fw = fwt_kikr], by (pctile kode nama_daerah)
+	
+	
+	tempfile pctile20`num'
+	save `pctile20`num'', replace
+}
+
+//combine all annual data with merge
+merge 1:1 kode nama_daerah pctile using `pctile2021'
+drop _merge
+merge 1:1 kode nama_daerah pctile using `pctile2020'
+drop _merge
+merge 1:1 kode nama_daerah pctile using `pctile2019'
+drop _merge
+merge 1:1 kode nama_daerah pctile using `pctile2018'
+drop _merge
+
+tempfile pctile
+save `pctile', replace
+
+//uses inflation to equate the data year of all existing data with the 2018 base year
+import excel using "D:\Work\TAP_Jabar\WJTAP\dBase\dBase_1_Makro\Inflasi\inflasi.xlsx", firstrow clear
+keep if kode == 32
+//Because the Susenas data is March data, the inflation data used in March
+//to identify March data use substr to identify the month of March because the data format is "(month name) (year)"
+keep if substr(monthstr,1,5) == "March"
+gen year = substr(monthstr,7,.)
+destring year, replace
+keep if year >= 2018 & year <= 2022
+keep kode nama_daerah year inflasi
+reshape wide inflasi, i(kode nama_daerah) j(year)
+
+//merge inflation data to the percentile expenditure data
+merge 1:m nama_daerah using `pctile'
+drop _merge
+
+//using a loop, the per capita expenditure value for each percentile will be adjusted to the year of inflation using a formula:
+//year n expenditure in year n-1 = (100 * year n expenditure)/(100 + inflation year n-1)
+//This step is repeated until you get the desired value in the same base year
+foreach num of numlist 2018/2022 {
+	gen in`num'`num' = inc`num'
+}
+
+gen in20182019 = (100 * inc2019)/(100 + inflasi2019)
+gen in20192020 = (100 * inc2020)/(100 + inflasi2020)
+gen in20202021 = (100 * inc2021)/(100 + inflasi2021)
+gen in20212022 = (100 * inc2022)/(100 + inflasi2022)
+
+gen in20182020 = (100 * in20192020)/(100 + inflasi2019)
+gen in20192021 = (100 * in20202021)/(100 + inflasi2020)
+gen in20202022 = (100 * in20212022)/(100 + inflasi2021)
+
+gen in20182021 = (100 * in20192021)/(100 + inflasi2019)
+gen in20192022 = (100 * in20202022)/(100 + inflasi2020)
+
+gen in20182022 = (100 * in20192022)/(100 + inflasi2019)
+
+tempfile all
+save `all', replace
+
+//change the data by reshaping from wide to long based on the base year
+//This is done repeatedly because the existing data is divided into several base years, although the analysis will only focus on the 2018 base year data.
+keep kode nama_daerah pctile in20182018 in20182019 in20182020 in20182021 in20182022
+reshape long in2018, i(pctile kode nama_daerah) j(year)
+rename in2018 income_in2018
+tempfile 2018
+save `2018', replace
+use `all', clear
+keep kode nama_daerah pctile in20192019 in20192020 in20192021 in20192022
+reshape long in2019, i(pctile kode nama_daerah) j(year)
+rename in2019 income_in2019
+tempfile 2019
+save `2019', replace
+use `all', clear
+keep kode nama_daerah pctile in20202020 in20202021 in20202022
+reshape long in2020, i(pctile kode nama_daerah) j(year)
+rename in2020 income_in2020
+tempfile 2020
+save `2020', replace
+use `all', clear
+keep kode nama_daerah pctile in20212021 in20212022
+reshape long in2021, i(pctile kode nama_daerah) j(year)
+rename in2021 income_in2021
+tempfile 2021
+save `2021', replace
+use `all', clear
+keep kode nama_daerah pctile in20222022
+reshape long in2022, i(pctile kode nama_daerah) j(year)
+rename in2022 income_in2022
+merge 1:1 kode nama_daerah year pctile using `2021'
+drop _merge
+merge 1:1 kode nama_daerah year pctile using `2020'
+drop _merge
+merge 1:1 kode nama_daerah year pctile using `2019'
+drop _merge
+merge 1:1 kode nama_daerah year pctile using `2018'
+drop _merge
+
+//save and export the result to excel so it can be visualized using tableau
+export excel using gic.xlsx, sheet(base_byinfl) firstrow(variables) sheetreplace
